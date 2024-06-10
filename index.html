@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="utf-8" http-equiv="encoding">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Taikapeili</title>
+</head>
+
+<style type="text/css">
+html {
+  background-color: #000;
+  color: #fff;
+  font-size: 20px;
+  font-family: sans-serif;
+}
+
+.weatherwidget-io {
+  height: 140px !important;
+}
+
+.weatherwidget-io-frame {
+  transform: scale(1.3);
+  transform-origin: 0 0;
+  width: 75%;
+  height: 75% !important;
+}
+
+#main {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+}
+
+#charts {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+}
+
+.chart-widget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chart-container {
+  padding-bottom: 8px;
+  width: 45vw;
+  height: 30vh;
+}
+
+.status {
+  display: inline;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+#aq-forecast, #uv-forecast {
+  width: 45vw;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+}
+
+#aq-forecast > div, #uv-forecast > div {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 16px;
+  padding-right: 16px;
+  align-items: baseline;
+}
+
+#aq-value, #aq-unit, #uv-value {
+  opacity: 0.5;
+}
+
+#aq-unit {
+  font-size: 60%;
+  padding-left: 4px;
+}
+
+#radar-container {
+  width: 45vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#radar {
+  position: relative;
+  width: 384px;
+  height: 384px;
+}
+
+#radar img {
+  position: absolute;
+  border-radius: 8px;
+  xxtransform: scale(0.5);
+  width: 100%;
+  height: 100%;
+}
+
+</style>
+
+<a class="weatherwidget-io" href="https://forecast7.com/en/n37d81144d96/melbourne/" data-days="5" data-theme="dark" >Melbourne VIC, Australia</a>
+
+<div id="main">
+  <div id="charts">
+    <div class="chart-widget">
+      <div id="uv-forecast"></div>
+      <div class="chart-container"><canvas id="uv-chart"></canvas></div>
+    </div>
+
+    <div class="chart-widget">
+      <div id="aq-forecast"></div>
+      <div class="chart-container"><canvas id="aq-chart"></canvas></div>
+    </div>
+  </div>
+
+  <div id="radar-container">
+    <div id="radar"></div>
+  </div>
+</div>
+
+<script src="chart.js"></script>
+<script src="chartjs-plugin-annotation.min.js"></script>
+
+<script>
+const UV_LOW = 0;
+const UV_MODERATE = 1;
+const UV_HIGH = 2;
+const UV_VERY_HIGH = 3;
+const UV_EXTREME = 4;
+
+function classifyForecast(value) {
+  if (value <= 2.5) {
+    return UV_LOW;
+  }
+  if (value > 2.5 && value <= 5.5) {
+    return UV_MODERATE;
+  }
+  if (value > 5.5 && value <= 7.5) {
+    return UV_HIGH;
+  }
+  if (value > 7.5 && value <= 10.5) {
+    return UV_VERY_HIGH;
+  }
+  return UV_EXTREME;
+}
+
+async function updateUV() {
+  const d = new Date();
+  const timestamp = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  const response = await fetch(`https://uvdata.arpansa.gov.au/api/uvlevel/?longitude=145.1&latitude=-37.73&date=${timestamp}`);
+  const data = await response.json();
+
+  const ctx = document.getElementById('uv-chart');
+
+  const labels = [];
+  const forecast = [];
+  const forecastLow = [];
+  const forecastModerate = [];
+  const forecastHigh = [];
+  const forecastVeryHigh = [];
+  const forecastExtreme = [];
+  const measured = [];
+  const classes = ['Low', 'Moderate', 'High', 'Very high', 'Extreme'];
+  const colors = ['#42a93c', '#a8a93c', '#a9673c', '#a93c3c', '#673ca9'];
+  var latestMeasuredValue = 0;
+  var latestMeasuredTime = 0;
+
+  for (var i = 0; i < data.GraphData.length; i++) {
+    const time = data.GraphData[i].Date.split(' ')[1];
+    labels.push(time);
+    forecast.push(data.GraphData[i].Forecast);
+    if (data.GraphData[i].Measured != null) {
+      measured.push(data.GraphData[i].Measured);
+      latestMeasuredTime = time;
+      latestMeasuredValue = data.GraphData[i].Measured;
+    } else {
+      measured.push(null);
+    }
+
+    const f = data.GraphData[i].Forecast;
+    const c = classifyForecast(f);
+    if (c === UV_LOW) {
+      forecastLow.push(f);
+    } else {
+      forecastLow.push(null);
+    }
+    if (c === UV_MODERATE) {
+      forecastModerate.push(f);
+    } else {
+      forecastModerate.push(null);
+    }
+    if (c === UV_HIGH) {
+      forecastHigh.push(f);
+    } else {
+      forecastHigh.push(null);
+    }
+    if (c == UV_VERY_HIGH) {
+      forecastVeryHigh.push(f);
+    } else {
+      forecastVeryHigh.push(null);
+    }
+    if (c == UV_EXTREME) {
+      forecastExtreme.push(f);
+    } else {
+      forecastExtreme.push(null);
+    }
+  }
+
+  const latestClass = classes[classifyForecast(latestMeasuredValue)];
+  const latestColor = colors[classifyForecast(latestMeasuredValue)];
+  const status = document.querySelector('#uv-forecast');
+  status.innerHTML = `
+      <div>
+        <div class='status' style='background: ${latestColor}'></div>
+        UV index:&nbsp;<b>${latestClass}</b>
+      </div>
+      <div>
+        <span id='uv-value'>${latestMeasuredValue.toPrecision(2)}</span>
+      </div>
+    </div>
+  `;
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Measured',
+        data: measured,
+        borderWidth: 2,
+        borderColor: latestColor,
+        backgroundColor: latestColor,
+      }, {
+        label: 'Low',
+        data: forecastLow,
+        borderWidth: 2,
+        borderColor: colors[UV_LOW],
+        backgroundColor: colors[UV_LOW],
+      }, {
+        label: 'Moderate',
+        data: forecastModerate,
+        borderWidth: 2,
+        borderColor: colors[UV_MODERATE],
+        backgroundColor: colors[UV_MODERATE],
+      }, {
+        label: 'High',
+        data: forecastHigh,
+        borderWidth: 2,
+        borderColor: colors[UV_HIGH],
+        backgroundColor: colors[UV_HIGH],
+      }, {
+        label: 'Very high',
+        data: forecastVeryHigh,
+        borderWidth: 2,
+        borderColor: colors[UV_VERY_HIGH],
+        backgroundColor: colors[UV_VERY_HIGH],
+      }, {
+        label: 'Extreme',
+        data: forecastExtreme,
+        borderWidth: 2,
+        borderColor: colors[UV_EXTREME],
+        backgroundColor: colors[UV_EXTREME],
+      }]
+    },
+    options: {
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 16,
+          grid: {
+            color: '#666',
+          }
+        },
+        x: {
+          grid: {
+            color: '#666',
+          }
+        }
+      },
+      elements: {
+        point: {
+          pointStyle: false,
+        }
+      },
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false,
+        },
+        annotation: {
+          annotations: {
+            line1: {
+              type: 'line',
+              xMin: latestMeasuredTime,
+              xMax: latestMeasuredTime,
+              borderColor: latestColor,
+              borderWidth: 2,
+              borderDash: [5, 5],
+            },
+            point1: {
+              type: 'point',
+              xValue: latestMeasuredTime,
+              yValue: latestMeasuredValue,
+              radius: 4,
+              backgroundColor: latestColor,
+              borderWidth: 0,
+            }
+          }
+        }
+      },
+    }
+  });
+}
+
+updateUV();
+
+</script>
+
+<!-- https://weatherwidget.io/ -->
+<script>
+!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src='https://weatherwidget.io/js/widget.min.js';fjs.parentNode.insertBefore(js,fjs);}}(document,'script','weatherwidget-io-js');
+</script>
+
+<script>
+function dateToTimestamp(d) {
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}T${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}Z`;
+}
+
+async function updateAirQuality() {
+  // Station: Altona North (4c4e8933-a66b-4e76-b2c2-ad9bb56d8809)
+  const station = '4c4e8933-a66b-4e76-b2c2-ad9bb56d8809';
+  const until = new Date();
+  const since = new Date(until.getTime() - 24 * 3600 * 1000);
+
+  fetch(`https://gateway.api.epa.vic.gov.au/environmentMonitoring/v1/sites/${station}/parameters?since=${dateToTimestamp(since)}&until=${dateToTimestamp(until)}&interval=1HR_AV`, {
+          method: 'GET',
+          headers: {
+              'Cache-Control': 'no-cache',
+              'X-API-Key': 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+          }
+      })
+      .then(response => response.json())
+      .then(response => {
+          var points = [];
+          var times = [];
+          var colors = [];
+          var first = true;
+          var label = '';
+          for (var advice of response.siteHealthAdvices) {
+            if (first) {
+              first = false;
+              const forecast = document.querySelector('#aq-forecast');
+              label = `${advice.healthParameter} ${advice.unit}`;
+              label = label.replace('&micro;', 'μ');
+              label = label.replace('&sup3;', '³');
+              forecast.innerHTML = `
+                <div>
+                  <div class='status' style='background: ${advice.healthAdviceColor}'></div>
+                  Air quality:&nbsp;<b>${advice.healthAdvice}</b>
+                </div>
+                <div>
+                  <span id='aq-value'>${advice.averageValue}</span> <span id='aq-unit'>${label}</span>
+                </div>
+              `;
+            }
+            points.unshift(advice.averageValue);
+            const date = new Date(advice.until);
+            times.unshift(`${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`);
+            colors.unshift(advice.healthAdviceColor);
+          }
+
+          const ctx = document.getElementById('aq-chart');
+          new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: times,
+              datasets: [{
+                label: label,
+                data: points,
+                borderColor: colors,
+                backgroundColor: colors,
+              }],
+            },
+            options: {
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  max: 100,
+                  grid: {
+                    color: '#666',
+                  }
+                },
+                x: {
+                  grid: {
+                    color: '#666',
+                  }
+                }
+              },
+              elements: {
+                point: {
+                  pointStyle: false,
+                }
+              },
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  display: false,
+                },
+              },
+            },
+          });
+        })
+      .catch(err => console.error(err));
+}
+
+updateAirQuality();
+
+const radarImages = [];
+var currentRadarImage = 0;
+
+function findAllMatches(re, s, group) {
+  const matches = [];
+  var m;
+  do {
+    m = re.exec(s);
+    if (m) {
+      matches.push(m[group]);
+    }
+  } while (m);
+  return matches;
+}
+
+function updateRadarAnimation() {
+  radarImages[currentRadarImage].setAttribute('style', 'visibility: hidden');
+  currentRadarImage = (currentRadarImage + 1) % radarImages.length;
+  radarImages[currentRadarImage].setAttribute('style', 'visibility: normal');
+  if (currentRadarImage == radarImages.length - 1) {
+    setTimeout(updateRadarAnimation, 900);
+  } else {
+    setTimeout(updateRadarAnimation, 300);
+  }
+}
+
+function updateRadar() {
+  fetch('http://www.bom.gov.au/products/IDR023.loop.shtml', {
+         method: 'GET',
+         headers: {
+           'Cache-Control': 'no-cache',
+         }
+      })
+      .then(response => response.text())
+      .then(response => {
+        const baseUrl = 'http://www.bom.gov.au';
+        const bgImageUrls = [
+          '/products/radar_transparencies/IDR023.background.png',
+          '/products/radar_transparencies/IDR023.topography.png',
+          '/products/radar_transparencies/IDR023.locations.png',
+          '/products/radar_transparencies/IDR023.range.png',
+        ];
+        const radarImageUrls = findAllMatches(/theImageNames\[.*= "(.*)"/g, response, 1);
+
+        for (url of bgImageUrls) {
+          var e = document.createElement('img');
+          e.setAttribute('src', baseUrl + url);
+          document.querySelector('#radar').appendChild(e);
+        }
+
+        for (url of radarImageUrls) {
+          var e = document.createElement('img');
+          e.setAttribute('src', baseUrl + url);
+          e.setAttribute('style', 'visibility: hidden');
+          document.querySelector('#radar').appendChild(e);
+          radarImages.push(e);
+        }
+        updateRadarAnimation();
+      });
+}
+
+updateRadar();
+
+</script>
+
+</html>
