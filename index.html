@@ -454,7 +454,7 @@ function updateRadarAnimation() {
 }
 
 function updateRadar() {
-  fetch('http://www.bom.gov.au/products/IDR023.loop.shtml', {
+  fetch('http://reg.bom.gov.au/products/IDR023.loop.shtml', {
          method: 'GET',
          headers: {
            'Cache-Control': 'no-cache',
@@ -462,7 +462,7 @@ function updateRadar() {
       })
       .then(response => response.text())
       .then(response => {
-        const baseUrl = 'http://www.bom.gov.au';
+        const baseUrl = 'http://reg.bom.gov.au';
         const bgImageUrls = [
           '/products/radar_transparencies/IDR023.background.png',
           '/products/radar_transparencies/IDR023.topography.png',
